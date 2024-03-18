@@ -5,6 +5,7 @@ Ce script est conçu pour tester la charge d'un cluster Kafka en utilisant xk6. 
 */
 
 import { check } from "k6";
+
 import {
   Writer,
   Reader,
