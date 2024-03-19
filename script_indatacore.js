@@ -41,6 +41,7 @@ const producerWriter = new Writer({
   topic: producerTopic,
   sasl: saslConfig,
 });
+
 const producerReader = new Reader({
   brokers: brokers,
   topic: producerTopic,
@@ -98,8 +99,8 @@ export default function () {
     producerWriter.produce({ messages: messages });
   }
 
-  // Attendre un court instant pour que les messages soient disponibles pour la consommation
-  sleep(1);
+  // Attendre que les messages soient disponible pour le consumer
+  sleep(5);
 
   // Consommation de messages du topic consommateur Display-line-Balance-consumer-topic
   let consumerMessages = consumerReader.consume({ limit: 10 });
@@ -113,28 +114,12 @@ export default function () {
     "at least one message returned from producer topic": (msgs) => msgs.length > 0,
   });
 
-  // Vérification que les messages proviennent du topic producteur
+  // Vérification que les messages proviennent du topic producteur (Display-line-Balance-producer-topic)
   for (let msg of producerMessages) {
     check(msg.topic === producerTopic, {
       "message is from producer topic": () => msg.topic === producerTopic,
     });
   }
-
-  /*
-  // Vérification de la structure et du contenu des messages consommés
-  for (let msg of consumerMessages) {
-    const deserialized = schemaRegistry.deserialize({
-      data: msg.value,
-      schemaType: SCHEMA_TYPE_JSON,
-    });
-  } */
-
- /* for (let msg of producerMessages) {
-    const deserialized = schemaRegistry.deserialize({
-      data: msg.value,
-      schemaType: SCHEMA_TYPE_JSON,
-    });
-  }*/
 }
 
 // Fermeture des connections
