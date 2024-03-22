@@ -15,7 +15,7 @@ export const options = {
     sasl_auth: {
       executor: "constant-vus",
       vus: 5,   // Réglages ici du nombre de user virtuels
-      duration: "10s",  // Durée de test de charge
+      duration: "2m",  // Durée de test de charge
       gracefulStop: "5s",
     },
   },
@@ -115,7 +115,7 @@ export const options1 = {
     });
   }
 
-  
+
   
 
 export function teardown(data) {

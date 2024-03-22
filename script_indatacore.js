@@ -1,3 +1,5 @@
+import http from 'k6/http';
+
 import { check, sleep } from "k6";
 import {
   Writer,
@@ -20,14 +22,14 @@ export const options = {
   },
 };
 
-const brokers = ["192.168.1.212:9092"];
+const brokers = ["192.168.1.xxx:9092"];
 const producerTopic = "Display-line-Balance-producer-topic";
 const consumerTopic = "Display-line-Balance-consumer-topic";
 
 // Configurations SASL (optionnel)
 const saslConfig = {
-  username: "admin",
-  password: "admin-secret",
+  username: "xxx",
+  password: "xxx",
   algorithm: SASL_SCRAM_SHA512,
 };
 
@@ -88,7 +90,7 @@ export default function () {
             IBOperation: {
               origin: "CVM",
               user: "CVM-SYS",
-              uuid: "1687798007798431503"
+              uuid: "1687798007798431504"
             }
           },
           schemaType: SCHEMA_TYPE_JSON,
@@ -113,6 +115,10 @@ export default function () {
   check(producerMessages, {
     "at least one message returned from producer topic": (msgs) => msgs.length > 0,
   });
+
+  // Effectuer une requête get sur l'application pour s'assurer qu'il répond d'abord
+  http.get("http://192.168.1.39:8080/")
+
 
   // Vérification que les messages proviennent du topic producteur (Display-line-Balance-producer-topic)
   for (let msg of producerMessages) {
