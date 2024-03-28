@@ -22,14 +22,14 @@ export const options = {
   },
 };
 
-const brokers = ["192.168.1.xxx:9092"];
+const brokers = ["192.168.1.212:9092"];
 const producerTopic = "Display-line-Balance-producer-topic";
 const consumerTopic = "Display-line-Balance-consumer-topic";
 
 // Configurations SASL (optionnel)
 const saslConfig = {
-  username: "xxx",
-  password: "xxx",
+  username: "admin",
+  password: "admin-secret",
   algorithm: SASL_SCRAM_SHA512,
 };
 
@@ -75,58 +75,64 @@ export const options1 = {
 };
 
 export default function () {
-  // Production de messages vers le topic producteur Display-line-Balance-producer-topic
-  for (let index = 0; index < 5; index++) {
-    let messages = [
-      {
-        value: schemaRegistry.serialize({
-          data: {
-            IBSubscriber: {
-              ib_mdn: "123456",
-              ib_level: "1",
-              ib_levelRetireTime: "2023-06-27T16:46:47",
-              ib_sublevel: ""
+  // Effectuer une requête GET sur l'application pour s'assurer qu'elle répond d'abord avec le code 200
+  let response = http.get("http://192.168.1.24:8080/");
+  check(response, {
+    "status is 200": (r) => r.status === 200,
+  });
+
+  // Si la réponse est 200, continuer avec les autres opérations
+  if (response.status === 200) {
+    // Production de messages vers le topic producteur Display-line-Balance-producer-topic
+    for (let index = 0; index < 5; index++) {
+      let messages = [
+        {
+          value: schemaRegistry.serialize({
+            data: {
+              IBSubscriber: {
+                ib_mdn: "123456",
+                ib_level: "1",
+                ib_levelRetireTime: "2023-06-27T16:46:47",
+                ib_sublevel: ""
+              },
+              IBOperation: {
+                origin: "CVM",
+                user: "CVM-SYS",
+                uuid: "1687798007798431504"
+              }
             },
-            IBOperation: {
-              origin: "CVM",
-              user: "CVM-SYS",
-              uuid: "1687798007798431504"
-            }
-          },
-          schemaType: SCHEMA_TYPE_JSON,
-        }),
-      },
-    ];
+            schemaType: SCHEMA_TYPE_JSON,
+          }),
+        },
+      ];
 
-    producerWriter.produce({ messages: messages });
-  }
+      producerWriter.produce({ messages: messages });
+    }
 
-  // Attendre que les messages soient disponible pour le consumer
-  sleep(5);
+    // Attendre que les messages soient disponibles pour le consommateur
+    sleep(5);
 
-  // Consommation de messages du topic consommateur Display-line-Balance-consumer-topic
-  let consumerMessages = consumerReader.consume({ limit: 10 });
-  check(consumerMessages, {
-    "at least one message returned from consumer topic": (msgs) => msgs.length > 0,
-  });
-
-  // Consommation de messages du topic producteur Display-line-Balance-producer-topic
-  let producerMessages = producerReader.consume({ limit: 10 });
-  check(producerMessages, {
-    "at least one message returned from producer topic": (msgs) => msgs.length > 0,
-  });
-
-  // Effectuer une requête get sur l'application pour s'assurer qu'il répond d'abord
-  http.get("http://192.168.1.39:8080/")
-
-
-  // Vérification que les messages proviennent du topic producteur (Display-line-Balance-producer-topic)
-  for (let msg of producerMessages) {
-    check(msg.topic === producerTopic, {
-      "message is from producer topic": () => msg.topic === producerTopic,
+    // Consommation de messages du topic consommateur Display-line-Balance-consumer-topic
+    let consumerMessages = consumerReader.consume({ limit: 10 });
+    check(consumerMessages, {
+      "at least one message returned from consumer topic": (msgs) => msgs.length > 0,
     });
+
+    // Consommation de messages du topic producteur Display-line-Balance-producer-topic
+    let producerMessages = producerReader.consume({ limit: 10 });
+    check(producerMessages, {
+      "at least one message returned from producer topic": (msgs) => msgs.length > 0,
+    });
+
+    // Vérification que les messages proviennent du topic producteur (Display-line-Balance-producer-topic)
+    for (let msg of producerMessages) {
+      check(msg.topic === producerTopic, {
+        "message is from producer topic": () => msg.topic === producerTopic,
+      });
+    }
   }
 }
+
 
 // Fermeture des connections
 export function teardown(data) {

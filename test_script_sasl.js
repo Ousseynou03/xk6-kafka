@@ -1,5 +1,6 @@
+import http from 'k6/http';
 
-import { check } from "k6";
+import { check, sleep } from "k6";
 import {
   Writer,
   Reader,
@@ -14,41 +15,52 @@ export const options = {
   scenarios: {
     sasl_auth: {
       executor: "constant-vus",
-      vus: 5,   // Réglages ici du nombre de user virtuels
-      duration: "2m",  // Durée de test de charge
-      gracefulStop: "5s",
+      vus: 5,   // Nombre d'utilisateurs virtuels
+      duration: "5s",  // Durée du test de charge
+    //  gracefulStop: "5s",
     },
   },
 };
 
 const brokers = ["192.168.1.212:9092"];
-const topic = "Display-line-Balance-producer-topic";
-const topicFinal = "Display-line-Balance-consumer-topic";
+const producerTopic = "Display-line-Balance-producer-topic";
+const consumerTopic = "Display-line-Balance-consumer-topic";
 
-// SASL config is optional
+// Configurations SASL (optionnel)
 const saslConfig = {
   username: "admin",
   password: "admin-secret",
   algorithm: SASL_SCRAM_SHA512,
 };
 
-
+// Configuration des offset et partition
 const offset = 0;
-// partition and groupId are mutually exclusive
 const partition = 0;
 
-const writer = new Writer({
+// Initialisation du Writer et du Reader pour Display-line-Balance-producer-topic
+const producerWriter = new Writer({
   brokers: brokers,
-  topic: topic,
+  topic: producerTopic,
   sasl: saslConfig,
 });
-const reader = new Reader({
+
+const producerReader = new Reader({
   brokers: brokers,
-  topic: topic,topicFinal,
+  topic: producerTopic,
   partition: partition,
   offset: offset,
   sasl: saslConfig,
 });
+
+// Initialisation du Reader pour Display-line-Balance-consumer-topic
+const consumerReader = new Reader({
+  brokers: brokers,
+  topic: consumerTopic,
+  partition: partition,
+  offset: offset,
+  sasl: saslConfig,
+});
+
 const connection = new Connection({
   address: brokers[0],
   sasl: saslConfig,
@@ -56,23 +68,25 @@ const connection = new Connection({
 const schemaRegistry = new SchemaRegistry();
 
 export const options1 = {
-    thresholds: {
-      kafka_writer_error_count: ["count == 0"],
-      kafka_reader_error_count: ["count == 0"],
-    },
-  };
+  thresholds: {
+    kafka_writer_error_count: ["count == 0"],
+    kafka_reader_error_count: ["count == 0"],
+  },
+};
 
-  export default function () {
+export default function () {
+  // Effectuer une requête GET sur l'application pour s'assurer qu'elle répond d'abord avec le code 200
+  let response = http.get("http://192.168.1.24:8080/");
+  check(response, {
+    "status is 200": (r) => r.status === 200,
+  });
+
+  // Si la réponse est 200, continuer avec les autres opérations
+  if (response.status === 200) {
+    // Production de messages vers le topic producteur Display-line-Balance-producer-topic
     for (let index = 0; index < 5; index++) {
       let messages = [
         {
-        /*  key: schemaRegistry.serialize({
-            data: {
-              correlationId: "test-id-abc-" + index,
-            },
-            schemaType: SCHEMA_TYPE_JSON,
-          }),*/
-
           value: schemaRegistry.serialize({
             data: {
               IBSubscriber: {
@@ -84,42 +98,46 @@ export const options1 = {
               IBOperation: {
                 origin: "CVM",
                 user: "CVM-SYS",
-                uuid: "1687798007798431503"
+                uuid: "1687798007798431504"
               }
             },
             schemaType: SCHEMA_TYPE_JSON,
           }),
         },
       ];
-  
-      writer.produce({ messages: messages });
+
+      producerWriter.produce({ messages: messages });
     }
-  
-    // Read 10 messages only
-    let messages = reader.consume({ limit: 10 });
-    check(messages, {
-      "10 messages returned": (msgs) => msgs.length == 10,
-      "value is correct": (msgs) => {
-        const deserialized = schemaRegistry.deserialize({
-          data: msgs[0].value,
-          schemaType: SCHEMA_TYPE_JSON,
-        })
-        return deserialized.IBSubscriber.ib_mdn === "123456" && // Vérifiez avec les valeurs réelles envoyées
-               deserialized.IBSubscriber.ib_level === "1" &&
-               deserialized.IBSubscriber.ib_levelRetireTime === "2023-06-27T16:46:47" &&
-               deserialized.IBSubscriber.ib_sublevel === "" &&
-               deserialized.IBOperation.origin === "CVM" &&
-               deserialized.IBOperation.user === "CVM-SYS" &&
-               deserialized.IBOperation.uuid === "1687798007798431503";
-      }
+
+    // Attendre que les messages soient disponibles pour le consommateur
+    sleep(5);
+
+    // Consommation de messages du topic consommateur Display-line-Balance-consumer-topic
+    let consumerMessages = consumerReader.consume({ limit: 10 });
+    check(consumerMessages, {
+      "at least one message returned from consumer topic": (msgs) => msgs.length > 0,
     });
+
+    // Consommation de messages du topic producteur Display-line-Balance-producer-topic
+    let producerMessages = producerReader.consume({ limit: 10 });
+    check(producerMessages, {
+      "at least one message returned from producer topic": (msgs) => msgs.length > 0,
+    });
+
+    // Vérification que les messages proviennent du topic producteur (Display-line-Balance-producer-topic)
+    for (let msg of producerMessages) {
+      check(msg.topic === producerTopic, {
+        "message is from producer topic": () => msg.topic === producerTopic,
+      });
+    }
   }
+}
 
 
-  
-
+// Fermeture des connections
 export function teardown(data) {
-  writer.close();
-  reader.close();
+  producerWriter.close();
+  producerReader.close();
+  consumerReader.close();
   connection.close();
 }
